@@ -453,103 +453,151 @@ export default function GeniusTripApp() {
 
   async function handleDownloadPdf() {
     if (!result) return;
-
-    // dynamic imports (client-only)
+    
     const { default: JsPDF } = await import("jspdf");
-    const { default: autoTable } = (await import("jspdf-autotable")) as {
-      default: AutoTableFn;
-    };
+    const { default: autoTable } = (await import("jspdf-autotable")) as { default: AutoTableFn };
 
-    const baseDoc = new JsPDF({ unit: "pt", format: "a4" });
-    const doc = baseDoc as unknown as JsPdfWithLast;
+    // Try to load your site icon as a logo (optional)
+    async function loadLogo(): Promise<string | null> {
+      try {
+        const res = await fetch("/icon.png"); // ensure app/icon.png exists
+        const blob = await res.blob();
+        return await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch {
+        return null;
+      }
+    }
+
+    const docBase = new JsPDF({ unit: "pt", format: "a4" });
+    const doc = docBase as unknown as JsPdfWithLast;
+
+    const BRAND = {
+      blue: [37, 99, 235] as [number, number, number],      // #2563EB
+      teal: [20, 184, 166] as [number, number, number],      // #14B8A6
+      purple: [139, 92, 246] as [number, number, number],    // #8B5CF6
+      slate:  [71, 85, 105] as [number, number, number],     // #475569
+    };
 
     const marginX = 48;
     let y = 64;
 
-    // Header
+    // Cover
+    const logo = await loadLogo();
+    if (logo) {
+      doc.addImage(logo, "PNG", marginX, y - 8, 28, 28);
+    }
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text("GeniusTripAI — Trip Itinerary", marginX, y);
+    doc.setFontSize(20);
+    doc.setTextColor(...BRAND.slate);
+    doc.text("GeniusTripAI — Smart Trip Plan", marginX + (logo ? 36 : 0), y + 10);
+    y += 36;
+
+    // Accent bar
+    doc.setFillColor(...BRAND.blue);
+    doc.roundedRect(marginX, y, 499, 6, 3, 3, "F");
     y += 20;
 
+    // Summary line
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    const intro = `From ${result.legs[0]?.from || "Origin"} — Dates: ${result.chosen.depart} → ${result.chosen.return} — Days: ${result.days}`;
-    doc.text(intro, marginX, y);
-    y += 14;
+    doc.setFontSize(11);
     doc.text(
-      `Budget — Flights: ${currency(result.summary.flights)}, Accommodation: ${currency(result.summary.accommodation)}, Food: ${currency(result.summary.food)}, Activities: ${currency(result.summary.activities)}, Total: ${currency(result.total)}`,
-      marginX,
-      y
+      `From ${result.legs[0]?.from || "Origin"} · ${result.chosen.depart} → ${result.chosen.return} · ${result.days} days`,
+      marginX, y
+    );
+    y += 16;
+    doc.setTextColor(0,0,0);
+    doc.setFontSize(10);
+    doc.text(
+      `Flights ${currency(result.summary.flights)} · Stays ${currency(result.summary.accommodation)} · Food ${currency(result.summary.food)} · Activities ${currency(result.summary.activities)} · Total ${currency(result.total)}`,
+      marginX, y
     );
     y += 22;
 
-    // Route
+    // Route chips
+    const chips = result.route.length ? result.route : ["—"];
+    let cx = marginX;
+    chips.forEach((c) => {
+      const txt = ` ${c} `;
+      const w = doc.getTextWidth(txt) + 14;
+      doc.setFillColor(245, 247, 255);
+      doc.setDrawColor(...BRAND.blue);
+      doc.roundedRect(cx, y - 10, w, 20, 8, 8, "FD");
+      doc.setTextColor(...BRAND.blue);
+      doc.text(txt, cx + 7, y + 4);
+      cx += w + 8;
+    });
+    doc.setTextColor(0,0,0);
+    y += 32;
+
+    // Flights
+    autoTable(doc, {
+      startY: y,
+      head: [["Flights — legs & dates", "", "", ""]],
+      body: [["From", "To", "Date", "Price"], ...result.legs.map(l => [l.from, l.to, l.date, currency(l.price)])],
+      styles: { fontSize: 9, cellPadding: 6 },
+      headStyles: { fillColor: BRAND.blue, textColor: 255 },
+      margin: { left: marginX, right: marginX },
+      theme: "striped",
+    });
+    y = (doc.lastAutoTable?.finalY ?? y) + 18;
+
+    // Stays
+    autoTable(doc, {
+      startY: y,
+      head: [["Accommodation — nights & options", "", "", "", ""]],
+      body: [
+        ["City", "Nights", "€ / Night", "Total", "Suggestions"],
+        ...result.stays.map(s => [
+          s.city,
+          String(s.nights),
+          currency(s.pricePerNight),
+          currency(s.total),
+          s.hotels.map(h => `${h.name} (${currency(h.pricePerNight)}/night)`).join("\n"),
+        ]),
+      ],
+      styles: { fontSize: 9, cellPadding: 6, valign: "top" },
+      headStyles: { fillColor: BRAND.teal, textColor: 255 },
+      margin: { left: marginX, right: marginX },
+      theme: "striped",
+    });
+    y = (doc.lastAutoTable?.finalY ?? y) + 18;
+
+    // Day-by-day detailed (branded header)
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text("Route", marginX, y);
-    y += 14;
+    doc.setTextColor(...BRAND.purple);
+    doc.text("Day-by-day itinerary (detailed)", marginX, y);
+    doc.setTextColor(0,0,0);
+    y += 10;
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    const route = result.route.length ? result.route.join(" → ") : "—";
-    doc.text(route, marginX, y);
-    y += 24;
-
-    // Flights table
+    // Detailed table
     autoTable(doc, {
       startY: y,
-      head: [["From", "To", "Date", "Price"]],
-      body: result.legs.map((l) => [l.from, l.to, l.date, currency(l.price)]),
-      styles: { fontSize: 9, cellPadding: 6 },
-      headStyles: { fillColor: [37, 99, 235], textColor: 255 },
-      margin: { left: marginX, right: marginX },
-      theme: "striped",
-    });
-    y = (doc.lastAutoTable?.finalY ?? y) + 20;
-
-    // Stays table
-    autoTable(doc, {
-      startY: y,
-      head: [["City", "Nights", "€ / Night", "Total", "Suggestions"]],
-      body: result.stays.map((s) => [
-        s.city,
-        String(s.nights),
-        currency(s.pricePerNight),
-        currency(s.total),
-        s.hotels.map((h) => `${h.name} (${currency(h.pricePerNight)}/night)`).join("\n"),
-      ]),
-      styles: { fontSize: 9, cellPadding: 6, valign: "top" },
-      headStyles: { fillColor: [20, 184, 166], textColor: 255 },
-      margin: { left: marginX, right: marginX },
-      theme: "striped",
-    });
-    y = (doc.lastAutoTable?.finalY ?? y) + 20;
-
-    // Day-by-day itinerary
-    autoTable(doc, {
-      startY: y,
-      head: [["Day", "Date", "City", "Morning", "Afternoon", "Evening", "Hotel", "Nightly", "Activities €"]],
-      body: itinerary.map((d) => [
+      head: [["Day", "Date", "City / Area", "Morning (window)", "Afternoon (window)", "Evening (window)", "Transit tip", "Food ideas"]],
+      body: itinerary.map(d => [
         String(d.day),
         d.date,
-        d.city,
-        d.morning ?? "—",
-        d.afternoon ?? "—",
-        d.evening ?? "—",
-        d.hotel ?? "—",
-        d.estHotelNight ? currency(d.estHotelNight) : "—",
-        d.estActivityCost ? currency(d.estActivityCost) : "—",
+        `${d.city} — ${d.area ?? "Central"}`,
+        `${d.morning ?? "—"}\n${d.windows?.morning ?? ""}`,
+        `${d.afternoon ?? "—"}\n${d.windows?.afternoon ?? ""}`,
+        `${d.evening ?? "—"}\n${d.windows?.evening ?? ""}`,
+        d.transit ?? "—",
+        `${d.foodMorning}\n${d.foodAfternoon}\n${d.foodEvening}`,
       ]),
       styles: { fontSize: 8, cellPadding: 5, valign: "top" },
       columnStyles: { 3: { cellWidth: 120 }, 4: { cellWidth: 120 }, 5: { cellWidth: 120 } },
-      headStyles: { fillColor: [139, 92, 246], textColor: 255 },
+      headStyles: { fillColor: BRAND.purple, textColor: 255 },
       margin: { left: marginX, right: marginX },
       theme: "grid",
       didDrawPage: () => {
         const pageSize = doc.internal.pageSize;
         const pageWidth = pageSize.getWidth();
         const pageHeight = pageSize.getHeight();
+        // footer
         doc.setFontSize(9);
         doc.setTextColor(120);
         doc.text(`Generated by GeniusTripAI — demo (no live prices yet)`, marginX, pageHeight - 24);
@@ -558,10 +606,9 @@ export default function GeniusTripApp() {
       },
     });
 
-    doc.save(
-      `GeniusTripAI_${result.chosen.depart.replaceAll("-", "")}-${result.chosen.return.replaceAll("-", "")}.pdf`
-    );
+    doc.save(`GeniusTripAI_${result.chosen.depart.replaceAll("-", "")}-${result.chosen.return.replaceAll("-", "")}.pdf`);
   }
+
 
 
 
