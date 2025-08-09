@@ -273,6 +273,68 @@ function estimateTrip(
   };
 }
 
+
+/* Build a day-by-day itinerary from the computed plan (not rendered on the site) */
+function buildItinerary(plan: Plan) {
+  const items: Array<{
+    day: number;
+    date: string;
+    city: string;
+    morning?: string;
+    afternoon?: string;
+    evening?: string;
+    hotel?: string;
+    estHotelNight?: number;
+    estActivityCost?: number;
+    notes?: string;
+  }> = [];
+
+  if (!plan?.stays?.length || !plan?.chosen?.depart) return items;
+
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  let current = new Date(plan.chosen.depart);
+  let dayNo = 1;
+
+  const ideasMap: Record<string, IdeaItem[]> = {};
+  plan.ideas.forEach((c) => (ideasMap[c.city.split(" (")[0].toLowerCase()] = c.items));
+
+  const pickHotel = (city: string) => plan.stays.find((s) => s.city === city)?.hotels?.[0]?.name ?? "Suggested stay";
+
+  plan.stays.forEach((stay) => {
+    const cityName = stay.city.split(" (")[0];
+    const key = cityName.toLowerCase();
+    const ideas = ideasMap[key] || [];
+
+    for (let n = 0; n < stay.nights; n++) {
+      const ideaA = ideas[n % ideas.length]?.title || "Explore neighborhood highlights";
+      const ideaB = ideas[(n + 1) % ideas.length]?.title || "Local food crawl";
+      const ideaC = ideas[(n + 2) % ideas.length]?.title || "Sunset viewpoint walk";
+
+      items.push({
+        day: dayNo,
+        date: fmt(current),
+        city: cityName,
+        morning: ideaA,
+        afternoon: ideaB,
+        evening: ideaC,
+        hotel: pickHotel(stay.city),
+        estHotelNight: stay.pricePerNight,
+        estActivityCost:
+          (ideas[n % ideas.length]?.price ?? 0) +
+          (ideas[(n + 1) % ideas.length]?.price ?? 0) +
+          (ideas[(n + 2) % ideas.length]?.price ?? 0),
+      });
+
+      current = new Date(current.getTime() + 24 * 60 * 60 * 1000);
+      dayNo += 1;
+    }
+  });
+
+  return items;
+}
+
+
+
 // ---------- Lightweight tests (runtime assertions) ----------
 function __runTests() {
   // Test 1
@@ -354,6 +416,132 @@ export default function GeniusTripApp() {
       .filter((d) => !tos.includes(d))
       .slice(0, 6);
   }, [toInput, tos]);
+
+
+  // near other hooks
+  const itinerary = useMemo(() => (result ? buildItinerary(result) : []), [result]);
+
+  // add this function inside the component
+  async function handleDownloadPdf() {
+    if (!result) return;
+
+    // Dynamic imports to avoid SSR issues
+    const { default: jsPDF } = await import("jspdf");
+    await import("jspdf-autotable");
+
+    const doc = new jsPDF({ unit: "pt", format: "a4" }); // 595 x 842 pt
+    const marginX = 48;
+    let y = 64;
+
+    // Brand / Header
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("GeniusTripAI — Trip Itinerary", marginX, y);
+    y += 20;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    const intro = `From ${result.legs[0]?.from || "Origin"} — Dates: ${result.chosen.depart} → ${result.chosen.return} — Days: ${result.days}`;
+    doc.text(intro, marginX, y);
+    y += 14;
+    doc.text(
+      `Budget summary — Flights: ${currency(result.summary.flights)}, Accommodation: ${currency(result.summary.accommodation)}, Food: ${currency(result.summary.food)}, Activities: ${currency(result.summary.activities)}, Total: ${currency(result.total)}`,
+      marginX,
+      y
+    );
+    y += 22;
+
+    // Route
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Route", marginX, y);
+    y += 14;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    const route = result.route.length ? result.route.join(" → ") : "—";
+    doc.text(route, marginX, y);
+    y += 24;
+
+    // Flights table
+    // @ts-ignore (autotable is added globally by the import above)
+    (doc as any).autoTable({
+      startY: y,
+      head: [["From", "To", "Date", "Price"]],
+      body: result.legs.map((l) => [l.from, l.to, l.date, currency(l.price)]),
+      styles: { fontSize: 9, cellPadding: 6 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+      margin: { left: marginX, right: marginX },
+      theme: "striped",
+    });
+    y = (doc as any).lastAutoTable.finalY + 20;
+
+    // Stays table
+    // @ts-ignore
+    (doc as any).autoTable({
+      startY: y,
+      head: [["City", "Nights", "€ / Night", "Total", "Suggestions"]],
+      body: result.stays.map((s) => [
+        s.city,
+        String(s.nights),
+        currency(s.pricePerNight),
+        currency(s.total),
+        s.hotels.map((h) => `${h.name} (${currency(h.pricePerNight)}/night)`).join("\n"),
+      ]),
+      styles: { fontSize: 9, cellPadding: 6, valign: "top" },
+      headStyles: { fillColor: [20, 184, 166], textColor: 255 },
+      margin: { left: marginX, right: marginX },
+      theme: "striped",
+    });
+    y = (doc as any).lastAutoTable.finalY + 20;
+
+    // Day-by-day itinerary (detailed; not shown on website)
+    // @ts-ignore
+    (doc as any).autoTable({
+      startY: y,
+      head: [["Day", "Date", "City", "Morning", "Afternoon", "Evening", "Hotel", "Nightly", "Activities €"]],
+      body: itinerary.map((d) => [
+        String(d.day),
+        d.date,
+        d.city,
+        d.morning || "—",
+        d.afternoon || "—",
+        d.evening || "—",
+        d.hotel || "—",
+        d.estHotelNight ? currency(d.estHotelNight) : "—",
+        d.estActivityCost ? currency(d.estActivityCost) : "—",
+      ]),
+      styles: { fontSize: 8, cellPadding: 5, valign: "top" },
+      columnStyles: {
+        3: { cellWidth: 120 },
+        4: { cellWidth: 120 },
+        5: { cellWidth: 120 },
+      },
+      headStyles: { fillColor: [139, 92, 246], textColor: 255 },
+      margin: { left: marginX, right: marginX },
+      theme: "grid",
+      didDrawPage: (data: any) => {
+        // Footer with page numbers
+        const pageSize = doc.internal.pageSize;
+        const pageWidth = pageSize.getWidth();
+        const pageHeight = pageSize.getHeight();
+        doc.setFontSize(9);
+        doc.setTextColor(120);
+        doc.text(
+          `Generated by GeniusTripAI — demo (no live prices yet)`,
+          marginX,
+          pageHeight - 24
+        );
+        const page = `${doc.internal.getNumberOfPages()}`;
+        doc.text(page, pageWidth - marginX, pageHeight - 24, { align: "right" });
+      },
+    });
+
+    doc.save(
+      `GeniusTripAI_${result.chosen.depart.replaceAll("-", "")}-${result.chosen.return.replaceAll("-", "")}.pdf`
+    );
+  }
+
 
   const canSearch = from && tos.length > 0 && days > 0 && budget > 0;
 
@@ -792,6 +980,22 @@ export default function GeniusTripApp() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Download PDF */}
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      onClick={handleDownloadPdf}
+                      className="rounded-full bg-blue-600 hover:bg-blue-700"
+                      disabled={!result || !itinerary.length}
+                      title={!result ? "Generate a plan first" : "Download a detailed PDF"}
+                    >
+                      Download PDF
+                    </Button>
+                  </div>
+
+
+
                 </div>
               )}
             </CardContent>
