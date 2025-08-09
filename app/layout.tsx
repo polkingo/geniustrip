@@ -18,11 +18,11 @@ export const metadata: Metadata = {
   icons: {
     // PNG (App Router will also auto-serve app/icon.png, but we declare explicitly too)
     icon: [
-      { url: "/icon.png?v=3", type: "image/png", sizes: "512x512" },
-      { url: "/favicon.ico?v=3", type: "image/x-icon" }, // for agents requesting .ico
+      { url: "/icon-v4.png?", type: "image/png", sizes: "512x512" },
+      { url: "/favicon-v4.ico?", type: "image/x-icon" }, // for agents requesting .ico
     ],
-    shortcut: "/favicon.ico?v=3",
-    apple: "/icon.png?v=3",
+    shortcut: "/favicon-v4.ico?",
+    apple: "/icon-v4.png?",
   },
 };
 
