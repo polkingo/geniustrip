@@ -19,9 +19,9 @@ export const metadata: Metadata = {
     // PNG (App Router will also auto-serve app/icon.png, but we declare explicitly too)
     icon: [
       { url: "/icon-v4.png?", type: "image/png", sizes: "512x512" },
-      { url: "/favicon-v4.ico?", type: "image/x-icon" }, // for agents requesting .ico
+      { url: "/icon-v4.ico?", type: "image/x-icon" }, // for agents requesting .ico
     ],
-    shortcut: "/favicon-v4.ico?",
+    shortcut: "/icon-v4.ico?",
     apple: "/icon-v4.png?",
   },
 };
