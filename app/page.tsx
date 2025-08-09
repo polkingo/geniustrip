@@ -40,6 +40,35 @@ type Plan = {
   route: string[];
 };
 
+
+// ==== jsPDF + AutoTable minimal types (v3) ====
+type JsPdfCtor = typeof import("jspdf").default;
+type JsPdfInstance = InstanceType<JsPdfCtor>;
+
+interface AutoTableOptions {
+  startY?: number;
+  head?: string[][];
+  body?: (string | number)[][];
+  styles?: Record<string, unknown>;
+  headStyles?: Record<string, unknown>;
+  margin?: { left?: number; right?: number };
+  theme?: "striped" | "grid" | "plain";
+  columnStyles?: Record<number, { cellWidth?: number }>;
+  didDrawPage?: () => void;
+}
+
+type AutoTableFn = (doc: JsPdfInstance, options: AutoTableOptions) => void;
+
+interface JsPdfWithLast extends JsPdfInstance {
+  lastAutoTable?: { finalY: number };
+  getNumberOfPages: () => number;
+}
+
+
+
+
+
+
 /* ========= Utils ========= */
 const currency = (n: number, cur: CurrencyCode = "EUR"): string =>
   new Intl.NumberFormat(undefined, {
@@ -421,19 +450,23 @@ export default function GeniusTripApp() {
   // near other hooks
   const itinerary = useMemo(() => (result ? buildItinerary(result) : []), [result]);
 
-  // add this function inside the component
+
   async function handleDownloadPdf() {
     if (!result) return;
 
-    // Dynamic imports to avoid SSR issues
-    const { default: jsPDF } = await import("jspdf");
-    await import("jspdf-autotable");
+    // dynamic imports (client-only)
+    const { default: JsPDF } = await import("jspdf");
+    const { default: autoTable } = (await import("jspdf-autotable")) as {
+      default: AutoTableFn;
+    };
 
-    const doc = new jsPDF({ unit: "pt", format: "a4" }); // 595 x 842 pt
+    const baseDoc = new JsPDF({ unit: "pt", format: "a4" });
+    const doc = baseDoc as unknown as JsPdfWithLast;
+
     const marginX = 48;
     let y = 64;
 
-    // Brand / Header
+    // Header
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
     doc.text("GeniusTripAI — Trip Itinerary", marginX, y);
@@ -445,7 +478,7 @@ export default function GeniusTripApp() {
     doc.text(intro, marginX, y);
     y += 14;
     doc.text(
-      `Budget summary — Flights: ${currency(result.summary.flights)}, Accommodation: ${currency(result.summary.accommodation)}, Food: ${currency(result.summary.food)}, Activities: ${currency(result.summary.activities)}, Total: ${currency(result.total)}`,
+      `Budget — Flights: ${currency(result.summary.flights)}, Accommodation: ${currency(result.summary.accommodation)}, Food: ${currency(result.summary.food)}, Activities: ${currency(result.summary.activities)}, Total: ${currency(result.total)}`,
       marginX,
       y
     );
@@ -464,8 +497,7 @@ export default function GeniusTripApp() {
     y += 24;
 
     // Flights table
-    // @ts-ignore (autotable is added globally by the import above)
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: y,
       head: [["From", "To", "Date", "Price"]],
       body: result.legs.map((l) => [l.from, l.to, l.date, currency(l.price)]),
@@ -474,11 +506,10 @@ export default function GeniusTripApp() {
       margin: { left: marginX, right: marginX },
       theme: "striped",
     });
-    y = (doc as any).lastAutoTable.finalY + 20;
+    y = (doc.lastAutoTable?.finalY ?? y) + 20;
 
     // Stays table
-    // @ts-ignore
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: y,
       head: [["City", "Nights", "€ / Night", "Total", "Suggestions"]],
       body: result.stays.map((s) => [
@@ -493,46 +524,36 @@ export default function GeniusTripApp() {
       margin: { left: marginX, right: marginX },
       theme: "striped",
     });
-    y = (doc as any).lastAutoTable.finalY + 20;
+    y = (doc.lastAutoTable?.finalY ?? y) + 20;
 
-    // Day-by-day itinerary (detailed; not shown on website)
-    // @ts-ignore
-    (doc as any).autoTable({
+    // Day-by-day itinerary
+    autoTable(doc, {
       startY: y,
       head: [["Day", "Date", "City", "Morning", "Afternoon", "Evening", "Hotel", "Nightly", "Activities €"]],
       body: itinerary.map((d) => [
         String(d.day),
         d.date,
         d.city,
-        d.morning || "—",
-        d.afternoon || "—",
-        d.evening || "—",
-        d.hotel || "—",
+        d.morning ?? "—",
+        d.afternoon ?? "—",
+        d.evening ?? "—",
+        d.hotel ?? "—",
         d.estHotelNight ? currency(d.estHotelNight) : "—",
         d.estActivityCost ? currency(d.estActivityCost) : "—",
       ]),
       styles: { fontSize: 8, cellPadding: 5, valign: "top" },
-      columnStyles: {
-        3: { cellWidth: 120 },
-        4: { cellWidth: 120 },
-        5: { cellWidth: 120 },
-      },
+      columnStyles: { 3: { cellWidth: 120 }, 4: { cellWidth: 120 }, 5: { cellWidth: 120 } },
       headStyles: { fillColor: [139, 92, 246], textColor: 255 },
       margin: { left: marginX, right: marginX },
       theme: "grid",
-      didDrawPage: (data: any) => {
-        // Footer with page numbers
+      didDrawPage: () => {
         const pageSize = doc.internal.pageSize;
         const pageWidth = pageSize.getWidth();
         const pageHeight = pageSize.getHeight();
         doc.setFontSize(9);
         doc.setTextColor(120);
-        doc.text(
-          `Generated by GeniusTripAI — demo (no live prices yet)`,
-          marginX,
-          pageHeight - 24
-        );
-        const page = `${doc.internal.getNumberOfPages()}`;
+        doc.text(`Generated by GeniusTripAI — demo (no live prices yet)`, marginX, pageHeight - 24);
+        const page = String(doc.getNumberOfPages());
         doc.text(page, pageWidth - marginX, pageHeight - 24, { align: "right" });
       },
     });
@@ -541,6 +562,8 @@ export default function GeniusTripApp() {
       `GeniusTripAI_${result.chosen.depart.replaceAll("-", "")}-${result.chosen.return.replaceAll("-", "")}.pdf`
     );
   }
+
+
 
 
   const canSearch = from && tos.length > 0 && days > 0 && budget > 0;
