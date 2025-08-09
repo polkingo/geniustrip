@@ -12,19 +12,19 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "GeniusTripAI – Smart AI Travel Planner",
-  description: "Plan multi-destination trips with AI – Find the best flights, accommodations, and activities instantly.",
+  description: "Plan multi-destination trips with AI…",
   icons: {
-    // PNG (App Router will also auto-serve app/icon.png, but we declare explicitly too)
     icon: [
-      { url: "/icon-v4.png?", type: "image/png", sizes: "512x512" },
-      { url: "/icon-v4.ico?", type: "image/x-icon" }, // for agents requesting .ico
+      { url: "/icon.png?v=7", type: "image/png", sizes: "512x512" }, // app/icon.png
+      { url: "/favicon.ico?v=7", type: "image/x-icon" },             // public/favicon.ico
     ],
-    shortcut: "/icon-v4.ico?",
-    apple: "/icon-v4.png?",
+    shortcut: "/favicon.ico?v=7",
+    apple: "/icon.png?v=7",
   },
 };
+
 
 export default function RootLayout({
   children,
