@@ -14,12 +14,15 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "GeniusTripAI – Smart AI Travel Planner",
-  description:
-    "Plan multi-destination trips with AI – Find the best flights, accommodations, and activities instantly.",
+  description: "Plan multi-destination trips with AI – Find the best flights, accommodations, and activities instantly.",
   icons: {
-    icon: "/favicon.png?v=2", // Your new 512x512 PNG
-    shortcut: "/favicon.png?v=2",
-    apple: "/favicon.png?v=2",
+    // PNG (App Router will also auto-serve app/icon.png, but we declare explicitly too)
+    icon: [
+      { url: "/icon.png?v=3", type: "image/png", sizes: "512x512" },
+      { url: "/favicon.ico?v=3", type: "image/x-icon" }, // for agents requesting .ico
+    ],
+    shortcut: "/favicon.ico?v=3",
+    apple: "/icon.png?v=3",
   },
 };
 
