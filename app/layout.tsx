@@ -17,9 +17,9 @@ export const metadata: Metadata = {
   description:
     "Plan multi-destination trips with AI – Find the best flights, accommodations, and activities instantly.",
   icons: {
-    icon: "/favicon.png", // Your new 512x512 PNG
-    shortcut: "/favicon.png",
-    apple: "/favicon.png",
+    icon: "/favicon.png?v=2", // Your new 512x512 PNG
+    shortcut: "/favicon.png?v=2",
+    apple: "/favicon.png?v=2",
   },
 };
 
