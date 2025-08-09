@@ -12,15 +12,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata = {
+export const metadata: Metadata = {
+  title: "GeniusTripAI – Smart AI Travel Planner",
+  description:
+    "Plan multi-destination trips with AI – Find the best flights, accommodations, and activities instantly.",
   icons: {
     icon: "/favicon.ico", // or "/favicon.png"
   },
-};
-
-export const metadata: Metadata = {
-  title: "GeniusTripAI – Smart AI Travel Planner",
-  description: "Plan multi-destination trips with AI – Find the best flights, accommodations, and activities instantly.",
 };
 
 export default function RootLayout({
