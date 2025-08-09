@@ -409,7 +409,7 @@ export default function GeniusTripApp() {
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-tr from-blue-400 to-indigo-500">
                   <Compass className="h-4 w-4 text-white" />
                 </span>
-                <span className="font-semibold text-slate-900">GeniusTrip.ai</span>
+                <span className="font-semibold text-slate-900">GeniusTripAI</span>
               </a>
               <nav className="hidden md:flex items-center gap-6 text-sm">
                 <a href="#plan" className="text-slate-600 hover:text-slate-900">
@@ -797,10 +797,10 @@ export default function GeniusTripApp() {
               PLAN SMARTER. TRAVEL CHEAPER
             </div>
             <h3 className="text-3xl font-black tracking-tight mt-2">
-              How GeniusTrip.ai Works
+              How GeniusTripAI Works
             </h3>
             <p className="text-slate-600 mt-2 max-w-2xl">
-              GeniusTrip.ai uses smart AI to turn your preferences into a complete
+              GeniusTripAI uses smart AI to turn your preferences into a complete
               travel plan — optimized for your time, budget, and vibe.
             </p>
             <div className="mt-6 rounded-2xl border bg-white shadow-sm">
@@ -873,7 +873,7 @@ export default function GeniusTripApp() {
             </div>
             <h3 className="text-3xl font-black tracking-tight mt-2">Our Valued Clients</h3>
             <p className="text-slate-600 mt-1">
-              We’re here to help you make the right decision. Explore what travellers say about GeniusTrip.ai.
+              We’re here to help you make the right decision. Explore what travellers say about GeniusTripAI.
             </p>
             <div className="mt-6 grid gap-5 sm:grid-cols-2 md:grid-cols-3">
               {[
@@ -949,7 +949,7 @@ export default function GeniusTripApp() {
         </section>
 
         <footer className="max-w-6xl mx-auto px-4 py-8 text-xs text-slate-500 border-t">
-          © {new Date().getFullYear()} GeniusTrip.ai — MVP demo. Connect real APIs soon.
+          © {new Date().getFullYear()} GeniusTripAI — MVP demo. Connect real APIs soon.
         </footer>
       </div>
     </TooltipProvider>
