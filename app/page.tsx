@@ -364,6 +364,34 @@ function buildItinerary(plan: Plan) {
 
 
 
+/* Enrich itinerary with area, time windows, transit tips, and food ideas */
+function enrichItinerary(itinerary: ReturnType<typeof buildItinerary>) {
+  const CITY_AREAS: Record<string, string[]> = {
+    paris: ["Louvre / 1er", "Le Marais", "Latin Quarter", "Montmartre", "Saint-Germain"],
+    barcelona: ["Eixample", "Gothic Quarter", "El Born", "Gràcia", "Barceloneta"],
+    lisbon: ["Baixa", "Alfama", "Belém", "Chiado", "Príncipe Real"],
+    rome: ["Centro Storico", "Trastevere", "Monti", "Vaticano", "Testaccio"],
+    berlin: ["Mitte", "Kreuzberg", "Prenzlauer Berg", "Friedrichshain", "Neukölln"],
+  };
+  const pick = <T,>(arr: T[], i: number) => (arr.length ? arr[i % arr.length] : undefined);
+
+  return itinerary.map((d, i) => {
+    const key = d.city.toLowerCase();
+    const areas = CITY_AREAS[key] ?? ["Central District", "Old Town", "Riverside"];
+    const area = pick(areas, i) ?? "Central";
+    const windows = { morning: "09:00–12:00", afternoon: "13:00–17:00", evening: "18:30–21:30" };
+    const transit = i === 0 ? "Airport/rail transfer → check-in" : "Walk / metro 10–25 min";
+    const foodMorning = "Local bakery breakfast";
+    const foodAfternoon = "Casual lunch near attraction";
+    const foodEvening = "Neighborhood bistro / tapas";
+
+    return { ...d, area, windows, transit, foodMorning, foodAfternoon, foodEvening };
+  });
+}
+
+
+
+
 // ---------- Lightweight tests (runtime assertions) ----------
 function __runTests() {
   // Test 1
@@ -448,12 +476,16 @@ export default function GeniusTripApp() {
 
 
   // near other hooks
-  const itinerary = useMemo(() => (result ? buildItinerary(result) : []), [result]);
+  const itinerary = useMemo(
+    () => (result ? enrichItinerary(buildItinerary(result)) : []),
+    [result]
+  );
+
 
 
   async function handleDownloadPdf() {
     if (!result) return;
-    
+
     const { default: JsPDF } = await import("jspdf");
     const { default: autoTable } = (await import("jspdf-autotable")) as { default: AutoTableFn };
 
