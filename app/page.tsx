@@ -560,10 +560,18 @@ export default function GeniusTripApp() {
                       className="gap-1 bg-blue-600 text-white hover:bg-blue-700 rounded-full"
                     >
                       <MapPin className="h-3 w-3" /> {t}
-                      <Trash2
-                        onClick={() => handleRemoveTo(t)}
-                        className="h-3 w-3 cursor-pointer"
-                      />
+                      <button
+                        type="button"
+                        aria-label={`Remove ${t}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleRemoveTo(t);
+                        }}
+                        className="ml-1 inline-flex items-center rounded-full p-0.5 hover:bg-blue-700/20 focus:outline-none focus:ring-2 focus:ring-white/60"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
                     </Badge>
                   ))}
                 </div>
@@ -877,16 +885,17 @@ export default function GeniusTripApp() {
             </p>
             <div className="mt-6 grid gap-5 sm:grid-cols-2 md:grid-cols-3">
               {[
-                { name: "Brendan", role: "owner of Goog", text: "A fantastic tool! It saved us time and money beyond expectations.", avatar: "B" },
-                { name: "jacychan", role: "owner of Breit", text: "Simply exceptional! Fast, efficient, and packed with the essentials.", avatar: "J" },
-                { name: "gaat", role: "owner of Pidio", text: "Great experience! The insights provided are incredibly helpful.", avatar: "G" },
-                { name: "Wilson", role: "owner of Talik", text: "An absolute must-have! Intuitive features and real-time insights.", avatar: "W" },
-                { name: "jamesli", role: "owner of Candto", text: "An amazing platform! It streamlined our workflow effortlessly.", avatar: "J" },
-                { name: "anna", role: "owner of Hanko", text: "A true game-changer! Powerful features and seamless UX.", avatar: "A" },
-                { name: "maya", role: "owner of Janio", text: "Incredible tool! Saved time and resources while improving efficiency.", avatar: "M" },
-                { name: "shallot", role: "owner of Tanko", text: "A game changer! Optimized our process and delivered great value.", avatar: "S" },
-                { name: "sofia", role: "frequent flyer", text: "City-aware suggestions were on point and many were free!", avatar: "S" },
+                { name: "Brendan",  role: "digital nomad",        text: "A fantastic tool! It saved me time and money beyond expectations.", avatar: "B" },
+                { name: "Jacy",     role: "Erasmus student",      text: "Perfect for tight budgets—helped me plan multiple cities easily.", avatar: "J" },
+                { name: "Gaia",     role: "solo backpacker",      text: "Loved the city-aware ideas—many were free and actually fun.", avatar: "G" },
+                { name: "Wilson",   role: "weekend city-breaker", text: "Found cheap dates I wouldn’t have considered. Smooth planning.", avatar: "W" },
+                { name: "James",    role: "remote worker",        text: "Balanced flights and stays nicely. Hostels toggle is clutch.", avatar: "J" },
+                { name: "Anna",     role: "budget traveler",      text: "Great breakdown of costs. I stayed under budget with room to spare.", avatar: "A" },
+                { name: "Maya",     role: "gap year student",     text: "Multi-city planning felt effortless. The route order saved money.", avatar: "M" },
+                { name: "Sam",      role: "couple on a budget",   text: "Clear plan, realistic prices, and easy to tweak. Loved it.", avatar: "S" },
+                { name: "Sofia",    role: "frequent flyer",       text: "Date picking is smart. It consistently picks cheaper windows.", avatar: "S" },
               ].map((r, idx) => (
+
                 <div key={idx} className="rounded-2xl border bg-white p-5 shadow-sm relative">
                   <div className="absolute right-3 top-3 text-slate-300">
                     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
@@ -930,12 +939,40 @@ export default function GeniusTripApp() {
 
             <div className="mt-6 rounded-2xl border bg-white shadow-sm overflow-hidden">
               {[
-                { q: "How do you ensure data accuracy?", a: "We’ll use API responses directly from partners (e.g., Kiwi/Booking) and validate ranges before showing them." },
-                { q: "Can I integrate this with other tools?", a: "Yes — webhooks and export endpoints are planned so you can send itineraries to calendars or CRMs." },
-                { q: "How long does it take to get started?", a: "You can generate a plan in under 20 seconds. Live booking links will arrive once partner APIs are enabled." },
-                { q: "What kind of support do you offer?", a: "Priority email/chat for paid users; SLA for partners." },
-                { q: "Is my data secure?", a: "We’ll store only what’s needed for your plan and delete on request. HTTPS everywhere." },
+                {
+                  q: "How do you pick the cheapest dates?",
+                  a: "We analyze your window and simulate typical price patterns (e.g., mid-week vs weekend) to suggest cheaper depart/return days. With partner APIs, this becomes real live pricing."
+                },
+                {
+                  q: "Can I force non-stop flights or limit stopovers?",
+                  a: "Yes. Use the stopovers control (None, 1, 2, 3+) and we’ll bias the plan accordingly and reflect it in the price estimate."
+                },
+                {
+                  q: "Do prices include baggage and city taxes?",
+                  a: "Estimates cover flights, stays, food, and activities. Baggage fees and local taxes vary by airline/city—when APIs are connected, we’ll show them explicitly."
+                },
+                {
+                  q: "Can I mix hostels and hotels?",
+                  a: "Totally. Toggle “Accommodation can include hostels.” We’ll consider cheaper options and rebalance nights to keep the nightly rate low."
+                },
+                {
+                  q: "Do you support multi-city and open-jaw routes?",
+                  a: "Yes—add multiple destinations and we’ll order them for a cheaper overall plan. Open-jaw support improves further once live flight APIs are enabled."
+                },
+                {
+                  q: "When is the best time to book?",
+                  a: "Generally 1–3 months for short-haul and 2–6 months for long-haul. Our date picker already prefers cheaper weekdays; live data will sharpen this."
+                },
+                {
+                  q: "How accurate are prices without live APIs?",
+                  a: "Today they’re informed estimates for demo purposes. With partner APIs (Kiwi/Booking), you’ll see real prices, availability, and instant booking links."
+                },
+                {
+                  q: "Can I export my plan or share it?",
+                  a: "You’ll be able to export to PDF/Calendar and share a private link. Integrations with email and trip boards are on the roadmap."
+                },
               ].map((item, i) => (
+
                 <div key={i} className={`border-b last:border-b-0 ${faqOpen === i ? "bg-slate-50/60" : ""}`}>
                   <button onClick={() => setFaqOpen(faqOpen === i ? -1 : i)} className="w-full flex items-center justify-between text-left p-5">
                     <span className="font-medium">{item.q}</span>
