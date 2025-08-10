@@ -524,7 +524,20 @@ export default function GeniusTripApp() {
         }
       }
 
-      const fallbackDays: AiDay[] = itinerary.map((d: any) => ({
+      type LocalDay = {
+        date: string;
+        city: string;
+        area?: string;
+        morning?: string;
+        afternoon?: string;
+        evening?: string;
+        transit?: string;
+        foodMorning?: string;
+        foodAfternoon?: string;
+        foodEvening?: string;
+      };
+
+      const fallbackDays: AiDay[] = (itinerary as LocalDay[]).map((d: LocalDay) => ({
         date: d.date,
         city: d.city,
         area: d.area ?? "Central",
@@ -538,6 +551,7 @@ export default function GeniusTripApp() {
           dinner: d.foodEvening ?? "",
         },
       }));
+
 
       const pdfDays: AiDay[] = (daysFromAI && daysFromAI.length) ? daysFromAI : fallbackDays;
 
