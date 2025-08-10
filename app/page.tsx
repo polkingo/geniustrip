@@ -40,6 +40,16 @@ type Plan = {
   route: string[];
 };
 
+type AiDay = {
+  date: string; city: string; area?: string;
+  morning: string; afternoon: string; evening: string;
+  transit?: string;
+  food?: { breakfast: string; lunch: string; dinner: string };
+};
+
+
+
+
 
 // ==== jsPDF + AutoTable minimal types (v3) ====
 type JsPdfCtor = typeof import("jspdf").default;
@@ -436,7 +446,11 @@ function __runTests() {
 
 // ---------- Page Component ----------
 export default function GeniusTripApp() {
+
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const [aiDays, setAiDays] = useState<AiDay[] | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   // Planner state
   const [from, setFrom] = useState("Lisbon (LIS)");
@@ -484,161 +498,204 @@ export default function GeniusTripApp() {
 
 
   async function handleDownloadPdf() {
-    if (!result) return;
+    if (!result || downloading) return;
 
-    const { default: JsPDF } = await import("jspdf");
-    const { default: autoTable } = (await import("jspdf-autotable")) as { default: AutoTableFn };
+    setDownloading(true);
+    try {
+      const { default: JsPDF } = await import("jspdf");
+      const { default: autoTable } = (await import("jspdf-autotable")) as { default: AutoTableFn };
 
-    // Try to load your site icon as a logo (optional)
-    async function loadLogo(): Promise<string | null> {
-      try {
-        const res = await fetch("/icon.png"); // ensure app/icon.png exists
-        const blob = await res.blob();
-        return await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-      } catch {
-        return null;
+      // ---- 1) AI days (cached) or fallback ----
+      let daysFromAI = aiDays;
+      if (!daysFromAI) {
+        try {
+          const res = await fetch("/api/itinerary", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ plan: result }),
+          });
+          const data = await res.json();
+          if (Array.isArray(data?.days) && data.days.length) {
+            daysFromAI = data.days as AiDay[];
+            setAiDays(daysFromAI);
+          }
+        } catch {
+          // ignore and use fallback
+        }
       }
-    }
 
-    const docBase = new JsPDF({ unit: "pt", format: "a4" });
-    const doc = docBase as unknown as JsPdfWithLast;
+      const fallbackDays: AiDay[] = itinerary.map((d: any) => ({
+        date: d.date,
+        city: d.city,
+        area: d.area ?? "Central",
+        morning: d.morning ?? "",
+        afternoon: d.afternoon ?? "",
+        evening: d.evening ?? "",
+        transit: d.transit ?? "",
+        food: {
+          breakfast: d.foodMorning ?? "",
+          lunch: d.foodAfternoon ?? "",
+          dinner: d.foodEvening ?? "",
+        },
+      }));
 
-    const BRAND = {
-      blue: [37, 99, 235] as [number, number, number],      // #2563EB
-      teal: [20, 184, 166] as [number, number, number],      // #14B8A6
-      purple: [139, 92, 246] as [number, number, number],    // #8B5CF6
-      slate:  [71, 85, 105] as [number, number, number],     // #475569
-    };
+      const pdfDays: AiDay[] = (daysFromAI && daysFromAI.length) ? daysFromAI : fallbackDays;
 
-    const marginX = 48;
-    let y = 64;
-
-    // Cover
-    const logo = await loadLogo();
-    if (logo) {
-      doc.addImage(logo, "PNG", marginX, y - 8, 28, 28);
-    }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.setTextColor(...BRAND.slate);
-    doc.text("GeniusTripAI — Smart Trip Plan", marginX + (logo ? 36 : 0), y + 10);
-    y += 36;
-
-    // Accent bar
-    doc.setFillColor(...BRAND.blue);
-    doc.roundedRect(marginX, y, 499, 6, 3, 3, "F");
-    y += 20;
-
-    // Summary line
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.text(
-      `From ${result.legs[0]?.from || "Origin"} · ${result.chosen.depart} → ${result.chosen.return} · ${result.days} days`,
-      marginX, y
-    );
-    y += 16;
-    doc.setTextColor(0,0,0);
-    doc.setFontSize(10);
-    doc.text(
-      `Flights ${currency(result.summary.flights)} · Stays ${currency(result.summary.accommodation)} · Food ${currency(result.summary.food)} · Activities ${currency(result.summary.activities)} · Total ${currency(result.total)}`,
-      marginX, y
-    );
-    y += 22;
-
-    // Route chips
-    const chips = result.route.length ? result.route : ["—"];
-    let cx = marginX;
-    chips.forEach((c) => {
-      const txt = ` ${c} `;
-      const w = doc.getTextWidth(txt) + 14;
-      doc.setFillColor(245, 247, 255);
-      doc.setDrawColor(...BRAND.blue);
-      doc.roundedRect(cx, y - 10, w, 20, 8, 8, "FD");
-      doc.setTextColor(...BRAND.blue);
-      doc.text(txt, cx + 7, y + 4);
-      cx += w + 8;
-    });
-    doc.setTextColor(0,0,0);
-    y += 32;
-
-    // Flights
-    autoTable(doc, {
-      startY: y,
-      head: [["Flights — legs & dates", "", "", ""]],
-      body: [["From", "To", "Date", "Price"], ...result.legs.map(l => [l.from, l.to, l.date, currency(l.price)])],
-      styles: { fontSize: 9, cellPadding: 6 },
-      headStyles: { fillColor: BRAND.blue, textColor: 255 },
-      margin: { left: marginX, right: marginX },
-      theme: "striped",
-    });
-    y = (doc.lastAutoTable?.finalY ?? y) + 18;
-
-    // Stays
-    autoTable(doc, {
-      startY: y,
-      head: [["Accommodation — nights & options", "", "", "", ""]],
-      body: [
-        ["City", "Nights", "€ / Night", "Total", "Suggestions"],
-        ...result.stays.map(s => [
-          s.city,
-          String(s.nights),
-          currency(s.pricePerNight),
-          currency(s.total),
-          s.hotels.map(h => `${h.name} (${currency(h.pricePerNight)}/night)`).join("\n"),
-        ]),
-      ],
-      styles: { fontSize: 9, cellPadding: 6, valign: "top" },
-      headStyles: { fillColor: BRAND.teal, textColor: 255 },
-      margin: { left: marginX, right: marginX },
-      theme: "striped",
-    });
-    y = (doc.lastAutoTable?.finalY ?? y) + 18;
-
-    // Day-by-day detailed (branded header)
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(...BRAND.purple);
-    doc.text("Day-by-day itinerary (detailed)", marginX, y);
-    doc.setTextColor(0,0,0);
-    y += 10;
-
-    // Detailed table
-    autoTable(doc, {
-      startY: y,
-      head: [["Day", "Date", "City / Area", "Morning (window)", "Afternoon (window)", "Evening (window)", "Transit tip", "Food ideas"]],
-      body: itinerary.map(d => [
-        String(d.day),
+      // Normalize rows for the table (no optional props referenced directly)
+      const DAY_WINDOWS = { morning: "09:00–12:00", afternoon: "13:00–17:00", evening: "18:30–21:30" };
+      const dayRows = pdfDays.map((d, idx) => ([
+        String(idx + 1),
         d.date,
         `${d.city} — ${d.area ?? "Central"}`,
-        `${d.morning ?? "—"}\n${d.windows?.morning ?? ""}`,
-        `${d.afternoon ?? "—"}\n${d.windows?.afternoon ?? ""}`,
-        `${d.evening ?? "—"}\n${d.windows?.evening ?? ""}`,
-        d.transit ?? "—",
-        `${d.foodMorning}\n${d.foodAfternoon}\n${d.foodEvening}`,
-      ]),
-      styles: { fontSize: 8, cellPadding: 5, valign: "top" },
-      columnStyles: { 3: { cellWidth: 120 }, 4: { cellWidth: 120 }, 5: { cellWidth: 120 } },
-      headStyles: { fillColor: BRAND.purple, textColor: 255 },
-      margin: { left: marginX, right: marginX },
-      theme: "grid",
-      didDrawPage: () => {
-        const pageSize = doc.internal.pageSize;
-        const pageWidth = pageSize.getWidth();
-        const pageHeight = pageSize.getHeight();
-        // footer
-        doc.setFontSize(9);
-        doc.setTextColor(120);
-        doc.text(`Generated by GeniusTripAI — demo (no live prices yet)`, marginX, pageHeight - 24);
-        const page = String(doc.getNumberOfPages());
-        doc.text(page, pageWidth - marginX, pageHeight - 24, { align: "right" });
-      },
-    });
+        `${d.morning || "—"}\n(${DAY_WINDOWS.morning})`,
+        `${d.afternoon || "—"}\n(${DAY_WINDOWS.afternoon})`,
+        `${d.evening || "—"}\n(${DAY_WINDOWS.evening})`,
+        d.transit || "—",
+        `${d.food?.breakfast ?? ""}\n${d.food?.lunch ?? ""}\n${d.food?.dinner ?? ""}`,
+      ]));
 
-    doc.save(`GeniusTripAI_${result.chosen.depart.replaceAll("-", "")}-${result.chosen.return.replaceAll("-", "")}.pdf`);
+      // ---- 2) PDF + branding (kept from your version) ----
+      async function loadLogo(): Promise<string | null> {
+        try {
+          const res = await fetch("/pdf-logo.png", { cache: "no-store" });
+          const blob = await res.blob();
+          return await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+        } catch {
+          return null;
+        }
+      }
+
+      const docBase = new JsPDF({ unit: "pt", format: "a4" });
+      const doc = docBase as unknown as JsPdfWithLast;
+
+      const BRAND = {
+        blue: [37, 99, 235] as [number, number, number],
+        teal: [20, 184, 166] as [number, number, number],
+        purple: [139, 92, 246] as [number, number, number],
+        slate: [71, 85, 105] as [number, number, number],
+      };
+
+      const marginX = 48;
+      let y = 64;
+
+      // Cover
+      const logo = await loadLogo();
+      if (logo) {
+        doc.addImage(logo, "PNG", marginX, y - 8, 28, 28);
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.setTextColor(...BRAND.slate);
+      doc.text("GeniusTripAI — Smart Trip Plan", marginX + (logo ? 36 : 0), y + 10);
+      y += 36;
+
+      // Accent bar
+      doc.setFillColor(...BRAND.blue);
+      doc.roundedRect(marginX, y, 499, 6, 3, 3, "F");
+      y += 20;
+
+      // Summary
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.text(
+        `From ${result.legs[0]?.from || "Origin"} · ${result.chosen.depart} → ${result.chosen.return} · ${result.days} days`,
+        marginX, y
+      );
+      y += 16;
+      doc.setTextColor(0,0,0);
+      doc.setFontSize(10);
+      doc.text(
+        `Flights ${currency(result.summary.flights)} · Stays ${currency(result.summary.accommodation)} · Food ${currency(result.summary.food)} · Activities ${currency(result.summary.activities)} · Total ${currency(result.total)}`,
+        marginX, y
+      );
+      y += 22;
+
+      // Route chips
+      const chips = result.route.length ? result.route : ["—"];
+      let cx = marginX;
+      chips.forEach((c) => {
+        const txt = ` ${c} `;
+        const w = doc.getTextWidth(txt) + 14;
+        doc.setFillColor(245, 247, 255);
+        doc.setDrawColor(...BRAND.blue);
+        doc.roundedRect(cx, y - 10, w, 20, 8, 8, "FD");
+        doc.setTextColor(...BRAND.blue);
+        doc.text(txt, cx + 7, y + 4);
+        cx += w + 8;
+      });
+      doc.setTextColor(0,0,0);
+      y += 32;
+
+      // Flights
+      autoTable(doc, {
+        startY: y,
+        head: [["Flights — legs & dates", "", "", ""]],
+        body: [["From", "To", "Date", "Price"], ...result.legs.map(l => [l.from, l.to, l.date, currency(l.price)])],
+        styles: { fontSize: 9, cellPadding: 6 },
+        headStyles: { fillColor: BRAND.blue, textColor: 255 },
+        margin: { left: marginX, right: marginX },
+        theme: "striped",
+      });
+      y = (doc.lastAutoTable?.finalY ?? y) + 18;
+
+      // Stays
+      autoTable(doc, {
+        startY: y,
+        head: [["Accommodation — nights & options", "", "", "", ""]],
+        body: [
+          ["City", "Nights", "€ / Night", "Total", "Suggestions"],
+          ...result.stays.map(s => [
+            s.city,
+            String(s.nights),
+            currency(s.pricePerNight),
+            currency(s.total),
+            s.hotels.map(h => `${h.name} (${currency(h.pricePerNight)}/night)`).join("\n"),
+          ]),
+        ],
+        styles: { fontSize: 9, cellPadding: 6, valign: "top" },
+        headStyles: { fillColor: BRAND.teal, textColor: 255 },
+        margin: { left: marginX, right: marginX },
+        theme: "striped",
+      });
+      y = (doc.lastAutoTable?.finalY ?? y) + 18;
+
+      // Day-by-day detailed
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(...BRAND.purple);
+      doc.text("Day-by-day itinerary (detailed)", marginX, y);
+      doc.setTextColor(0,0,0);
+      y += 10;
+
+      autoTable(doc, {
+        startY: y,
+        head: [["Day", "Date", "City / Area", "Morning (window)", "Afternoon (window)", "Evening (window)", "Transit tip", "Food ideas"]],
+        body: dayRows,
+        styles: { fontSize: 8, cellPadding: 5, valign: "top" },
+        columnStyles: { 3: { cellWidth: 120 }, 4: { cellWidth: 120 }, 5: { cellWidth: 120 } },
+        headStyles: { fillColor: BRAND.purple, textColor: 255 },
+        margin: { left: marginX, right: marginX },
+        theme: "grid",
+        didDrawPage: () => {
+          const pageSize = doc.internal.pageSize;
+          const pageWidth = pageSize.getWidth();
+          const pageHeight = pageSize.getHeight();
+          doc.setFontSize(9);
+          doc.setTextColor(120);
+          doc.text(`Generated by GeniusTripAI — demo (no live prices yet)`, marginX, pageHeight - 24);
+          const page = String(doc.getNumberOfPages());
+          doc.text(page, pageWidth - marginX, pageHeight - 24, { align: "right" });
+        },
+      });
+
+      doc.save(`GeniusTripAI_${result.chosen.depart.replaceAll("-", "")}-${result.chosen.return.replaceAll("-", "")}.pdf`);
+    } finally {
+      setDownloading(false);
+    }
   }
 
 
@@ -673,20 +730,16 @@ export default function GeniusTripApp() {
     setLoading(true);
     setTimeout(() => {
       const plan = estimateTrip(
-        from,
-        tos,
-        latestReturn,
-        earliestDeparture,
-        days,
-        budget,
+        from, tos, latestReturn, earliestDeparture, days, budget,
         { stopovers, allowHostels }
       );
       setResult(plan);
+      setAiDays(null); // <-- invalidate AI cache when plan changes
       setLoading(false);
-      const el = document.getElementById("plan");
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 700);
   };
+
 
   return (
     <TooltipProvider>
@@ -1086,14 +1139,20 @@ export default function GeniusTripApp() {
                   {/* Download PDF */}
                   <div className="flex justify-end">
                     <Button
-                      type="button"
                       onClick={handleDownloadPdf}
+                      disabled={!result || downloading}
                       className="rounded-full bg-blue-600 hover:bg-blue-700"
-                      disabled={!result || !itinerary.length}
-                      title={!result ? "Generate a plan first" : "Download a detailed PDF"}
                     >
-                      Download PDF
+                      {downloading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Preparing PDF…
+                        </>
+                      ) : (
+                        <>Download PDF</>
+                      )}
                     </Button>
+
                   </div>
 
 
